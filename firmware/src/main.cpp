@@ -10,6 +10,7 @@
 
 #include <Arduino.h>
 #include <WiFi.h>
+#include <WiFiClientSecure.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
 
@@ -338,9 +339,17 @@ bool sendTelemetryToGateway(const TelemetryPacket& packet) {
     if (WiFi.status() != WL_CONNECTED) return false;
 
     HTTPClient http;
-    http.begin(TELEMETRY_POST_URL);
+    WiFiClientSecure secureClient;
+    WiFiClient standardClient;
+
+    if (String(TELEMETRY_POST_URL).startsWith("https://")) {
+        secureClient.setInsecure();
+        http.begin(secureClient, TELEMETRY_POST_URL);
+    } else {
+        http.begin(standardClient, TELEMETRY_POST_URL);
+    }
     http.addHeader("Content-Type", "application/json");
-    http.setTimeout(3000);
+    http.setTimeout(5000);
 
     StaticJsonDocument<256> doc;
     doc["device_id"]       = packet.deviceId;
@@ -386,8 +395,16 @@ bool fetchDashboardPrescription() {
 
     HTTPClient http;
     String url = String(TELEMETRY_GET_URL) + String(DEVICE_ID);
-    http.begin(url);
-    http.setTimeout(3000);
+    WiFiClientSecure secureClient;
+    WiFiClient standardClient;
+
+    if (url.startsWith("https://")) {
+        secureClient.setInsecure();
+        http.begin(secureClient, url);
+    } else {
+        http.begin(standardClient, url);
+    }
+    http.setTimeout(5000);
 
     int httpCode = http.GET();
     if (httpCode == 200) {

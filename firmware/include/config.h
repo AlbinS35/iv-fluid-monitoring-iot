@@ -18,8 +18,8 @@
 #define WIFI_PASSWORD         "Albin@123"
 #define WIFI_RETRY_INTERVAL_MS 10000
 
-// Ward Gateway Host (Laptop IP on Mobile Hotspot running Flask REST API)
-#define GATEWAY_HOST          "http://10.70.55.215:5000"
+// Ward Gateway Host (Render Cloud Deployment)
+#define GATEWAY_HOST          "https://iv-fluid-monitoring-iot.onrender.com"
 #define TELEMETRY_POST_URL    GATEWAY_HOST "/api/telemetry"
 #define TELEMETRY_GET_URL     GATEWAY_HOST "/api/latest/"
 
