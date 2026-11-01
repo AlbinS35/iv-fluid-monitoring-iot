@@ -1,0 +1,1283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+  <title>Smart IoT IV Fluid Infusion Monitoring | WARD-A-BED-07</title>
+  
+  <!-- Inter & JetBrains Mono Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+  <!-- Material Symbols Outlined -->
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+
+  <style>
+    :root {
+      --bg: #070d18;
+      --card-bg: #0e1726;
+      --card-border: rgba(255, 255, 255, 0.08);
+      --cyan: #06b6d4;
+      --cyan-glow: rgba(6, 182, 212, 0.25);
+      --green: #10b981;
+      --green-glow: rgba(16, 185, 129, 0.25);
+      --amber: #f59e0b;
+      --amber-glow: rgba(245, 158, 11, 0.25);
+      --red: #ef4444;
+      --red-glow: rgba(239, 68, 68, 0.35);
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --text-dim: #64748b;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background: radial-gradient(circle at 15% 15%, #0f1c33 0%, var(--bg) 100%);
+      color: var(--text);
+      font-family: 'Inter', -apple-system, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      padding: 1.25rem 1.5rem;
+    }
+
+    .container {
+      max-width: 1140px;
+      margin: 0 auto;
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 1.15rem;
+    }
+
+    /* ==================== HEADER ==================== */
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.9rem 1.25rem;
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 0.75rem;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 0.85rem;
+    }
+
+    .brand-icon {
+      width: 40px;
+      height: 40px;
+      background: linear-gradient(135deg, #0891b2, #06b6d4);
+      border-radius: 0.6rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      box-shadow: 0 0 16px var(--cyan-glow);
+    }
+
+    .brand-title {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: #ffffff;
+      letter-spacing: -0.01em;
+    }
+
+    .brand-sub {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 0.85rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.78rem;
+    }
+
+    .device-pill {
+      background: rgba(6, 182, 212, 0.1);
+      border: 1px solid rgba(6, 182, 212, 0.3);
+      color: var(--cyan);
+      padding: 0.35rem 0.75rem;
+      border-radius: 0.5rem;
+      font-weight: 700;
+    }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.45rem;
+      padding: 0.35rem 0.75rem;
+      border-radius: 9999px;
+      font-weight: 600;
+      background: rgba(16, 185, 129, 0.1);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      color: var(--green);
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 8px var(--green);
+      animation: pulse-dot 2s infinite ease-in-out;
+    }
+
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.85); }
+    }
+
+    .clock {
+      color: var(--text);
+      font-weight: 600;
+      background: rgba(255, 255, 255, 0.04);
+      padding: 0.35rem 0.65rem;
+      border-radius: 0.5rem;
+      border: 1px solid var(--card-border);
+    }
+
+    .btn-buzzer {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--card-border);
+      color: var(--text-muted);
+      padding: 0.35rem 0.75rem;
+      border-radius: 0.5rem;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      transition: all 0.2s;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75rem;
+    }
+    .btn-buzzer:hover {
+      background: rgba(255, 255, 255, 0.1);
+      color: var(--text);
+    }
+
+    /* ==================== 3 FOCUS CARDS ==================== */
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1.15rem;
+    }
+
+    @media (max-width: 900px) {
+      .kpi-grid { grid-template-columns: 1fr; }
+    }
+
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 0.75rem;
+      padding: 1.25rem;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+      position: relative;
+    }
+
+    .card-header {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+      font-family: 'JetBrains Mono', monospace;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 0.75rem;
+    }
+
+    /* CARD 1: DPM GAUGE */
+    .dpm-body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 0.4rem 0;
+    }
+
+    .gauge-svg {
+      width: 180px;
+      height: 100px;
+      overflow: visible;
+    }
+
+    .dpm-number {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 3.2rem;
+      font-weight: 700;
+      color: var(--cyan);
+      line-height: 1;
+      margin-top: -1.8rem;
+    }
+
+    .dpm-unit {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      margin-top: 0.25rem;
+    }
+
+    .dpm-footer {
+      margin-top: 0.85rem;
+      font-size: 0.75rem;
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--text-muted);
+      background: rgba(255, 255, 255, 0.03);
+      padding: 0.4rem 0.75rem;
+      border-radius: 0.5rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    /* CARD 2: VOLUME & PROGRESS */
+    .vol-body {
+      display: flex;
+      align-items: center;
+      gap: 1.25rem;
+      margin: 0.35rem 0;
+    }
+
+    .saline-flask {
+      width: 52px;
+      height: 106px;
+      border: 2px solid rgba(6, 182, 212, 0.4);
+      border-radius: 0.65rem;
+      position: relative;
+      overflow: hidden;
+      background: rgba(4, 14, 32, 0.7);
+      flex-shrink: 0;
+      display: flex;
+      align-items: flex-end;
+      padding: 2px;
+    }
+
+    .saline-liquid-fill {
+      width: 100%;
+      background: linear-gradient(180deg, #38bdf8, #0284c7);
+      border-radius: 0.45rem;
+      transition: height 0.6s ease;
+      box-shadow: 0 0 10px rgba(6, 182, 212, 0.4);
+    }
+
+    .vol-stats {
+      flex: 1;
+    }
+
+    .vol-huge {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 2.2rem;
+      font-weight: 700;
+      color: var(--text);
+      line-height: 1.1;
+    }
+    .vol-huge span {
+      font-size: 0.95rem;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    .vol-row {
+      display: flex;
+      justify-content: space-between;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75rem;
+      margin-top: 0.35rem;
+      color: var(--text-muted);
+    }
+    .vol-row strong {
+      color: var(--text);
+    }
+
+    .progress-bar-track {
+      width: 100%;
+      height: 6px;
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 9999px;
+      margin-top: 0.85rem;
+      overflow: hidden;
+    }
+    .progress-bar-fill {
+      height: 100%;
+      background: var(--cyan);
+      border-radius: 9999px;
+      transition: width 0.6s ease;
+    }
+
+    /* CARD 3: ALERT STATUS */
+    .master-alert-box {
+      border-radius: 0.5rem;
+      padding: 0.6rem 0.85rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.85rem;
+      font-weight: 700;
+      margin-bottom: 0.75rem;
+      transition: all 0.3s;
+    }
+    .master-alert-NORMAL {
+      background: rgba(16, 185, 129, 0.15);
+      border: 1px solid rgba(16, 185, 129, 0.4);
+      color: var(--green);
+    }
+    .master-alert-LOW_VOLUME {
+      background: rgba(245, 158, 11, 0.2);
+      border: 1px solid rgba(245, 158, 11, 0.5);
+      color: var(--amber);
+      animation: alert-flash 1.2s infinite;
+    }
+    .master-alert-NO_FLOW,
+    .master-alert-FREE_FLOW {
+      background: rgba(239, 68, 68, 0.25);
+      border: 1px solid var(--red);
+      color: var(--red);
+      animation: alert-flash 0.8s infinite;
+    }
+    .master-alert-RATE_ERR {
+      background: rgba(245, 158, 11, 0.2);
+      border: 1px solid rgba(245, 158, 11, 0.5);
+      color: var(--amber);
+      animation: alert-flash 1.2s infinite;
+    }
+
+    @keyframes alert-flash {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    .alert-lamps-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+
+    .lamp-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.4rem 0.65rem;
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid var(--card-border);
+      border-radius: 0.4rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.73rem;
+      color: var(--text-muted);
+      transition: all 0.2s;
+    }
+
+    .lamp-row.is-active-normal {
+      background: rgba(16, 185, 129, 0.1);
+      border-color: rgba(16, 185, 129, 0.4);
+      color: var(--green);
+      font-weight: 600;
+    }
+    .lamp-row.is-active-warning {
+      background: rgba(245, 158, 11, 0.15);
+      border-color: rgba(245, 158, 11, 0.5);
+      color: var(--amber);
+      font-weight: 600;
+    }
+    .lamp-row.is-active-danger {
+      background: rgba(239, 68, 68, 0.2);
+      border-color: var(--red);
+      color: var(--red);
+      font-weight: 700;
+    }
+
+    .lamp-indicator-dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.15);
+    }
+    .is-active-normal .lamp-indicator-dot { background: var(--green); box-shadow: 0 0 8px var(--green); }
+    .is-active-warning .lamp-indicator-dot { background: var(--amber); box-shadow: 0 0 8px var(--amber); }
+    .is-active-danger .lamp-indicator-dot { background: var(--red); box-shadow: 0 0 10px var(--red); }
+
+    /* ==================== WAVEFORM CHART SECTION ==================== */
+    .chart-panel {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 0.75rem;
+      padding: 1.15rem 1.25rem;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+    }
+
+    .chart-top-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 0.75rem;
+    }
+
+    .chart-title-text {
+      font-size: 0.85rem;
+      font-weight: 600;
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .chart-legend-box {
+      display: flex;
+      gap: 1.25rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75rem;
+    }
+    .legend-entry {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+    .legend-stripe {
+      width: 14px;
+      height: 3px;
+      border-radius: 2px;
+    }
+
+    .canvas-wrapper {
+      position: relative;
+      width: 100%;
+      height: 210px;
+    }
+
+    #customChartCanvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    /* Simulation Control Bar (Minimal & Clean for Live Demo) */
+    .sim-bar {
+      display: flex;
+      align-items: center;
+      gap: 0.45rem;
+      margin-top: 0.75rem;
+      padding-top: 0.65rem;
+      border-top: 1px solid var(--card-border);
+      flex-wrap: wrap;
+    }
+    .sim-label {
+      font-size: 0.7rem;
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--text-dim);
+      margin-right: 0.3rem;
+    }
+    .btn-sim {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.7rem;
+      padding: 0.3rem 0.55rem;
+      border-radius: 0.35rem;
+      border: 1px solid var(--card-border);
+      background: rgba(255, 255, 255, 0.03);
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .btn-sim:hover {
+      background: rgba(6, 182, 212, 0.12);
+      border-color: var(--cyan);
+      color: var(--cyan);
+    }
+
+    /* ==================== AUDIT LOG TABLE ==================== */
+    .log-panel {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 0.75rem;
+      padding: 1rem 1.25rem;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+    }
+
+    .log-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.6rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      font-weight: 600;
+    }
+
+    .log-scroll-area {
+      max-height: 150px;
+      overflow-y: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75rem;
+      text-align: left;
+    }
+    th {
+      color: var(--text-dim);
+      font-weight: 600;
+      padding: 0.4rem 0.6rem;
+      border-bottom: 1px solid var(--card-border);
+      text-transform: uppercase;
+      font-size: 0.7rem;
+    }
+    td {
+      padding: 0.45rem 0.6rem;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+      color: var(--text-muted);
+    }
+    tr:hover td {
+      background: rgba(255, 255, 255, 0.02);
+      color: var(--text);
+    }
+
+    .badge-tag {
+      display: inline-block;
+      padding: 0.15rem 0.45rem;
+      border-radius: 0.25rem;
+      font-size: 0.68rem;
+      font-weight: 700;
+    }
+    .badge-NORMAL { background: rgba(16, 185, 129, 0.15); color: var(--green); }
+    .badge-LOW_VOLUME { background: rgba(245, 158, 11, 0.2); color: var(--amber); }
+    .badge-NO_FLOW,
+    .badge-FREE_FLOW { background: rgba(239, 68, 68, 0.25); color: var(--red); }
+    .badge-RATE_ERR { background: rgba(245, 158, 11, 0.2); color: var(--amber); }
+
+    /* FOOTER */
+    footer {
+      text-align: center;
+      font-size: 0.72rem;
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--text-dim);
+      padding: 0.5rem 0;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <!-- ==================== CLEAN HEADER ==================== -->
+    <header>
+      <div class="brand">
+        <div class="brand-icon">
+          <span class="material-symbols-outlined" style="font-size: 22px;">water_drop</span>
+        </div>
+        <div>
+          <div class="brand-title">Smart IoT IV Fluid Infusion Monitoring</div>
+          <div class="brand-sub">Bedside Optical Drop Counter & Flow Telematics</div>
+        </div>
+      </div>
+
+      <div class="header-right">
+        <span class="device-pill">DEVICE: WARD-A-BED-07</span>
+
+        <div class="status-pill" id="linkStatusPill" style="color:var(--text-muted)">
+          <span class="status-dot" id="statusDot" style="background:var(--text-muted);box-shadow:none;"></span>
+          <span id="linkStatusText">CONNECTING…</span>
+        </div>
+
+        <div class="clock" id="liveClock">--:--:--</div>
+
+        <button class="btn-buzzer" id="buzzerBtn" onclick="toggleRemoteBedsideSilence()" title="Click to Silence Bedside Hardware Buzzer (2 min)">
+          <span class="material-symbols-outlined" id="buzzerIcon" style="font-size: 16px;">notifications_off</span>
+          <span id="buzzerText">Silence Bedside Buzzer</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- ==================== 3 FOCUS TELEMETRY CARDS ==================== -->
+    <section class="kpi-grid">
+      <!-- 1. DRIP RATE (DPM) -->
+      <div class="card">
+        <div class="card-header">
+          <span>Optical Drop Rate (DPM)</span>
+          <span id="dropPulseDot" style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--cyan); box-shadow: 0 0 8px var(--cyan);"></span>
+        </div>
+
+        <div class="dpm-body">
+          <svg class="gauge-svg" viewBox="0 0 160 90">
+            <!-- Background Arc (0 to 150 DPM) -->
+            <path d="M 15 80 A 65 65 0 0 1 145 80" fill="none" stroke="#1f2937" stroke-width="12" stroke-linecap="round"></path>
+            <!-- Normal Target Corridor (30 to 50 DPM) -->
+            <path d="M 45 42 A 65 65 0 0 1 88 15" fill="none" stroke="rgba(16, 185, 129, 0.25)" stroke-width="12"></path>
+            <!-- Dynamic DPM Arc -->
+            <path id="gaugeArc" d="M 15 80 A 65 65 0 0 1 65 24" fill="none" stroke="#06b6d4" stroke-width="12" stroke-dasharray="140" stroke-dashoffset="45" stroke-linecap="round" style="transition: stroke-dashoffset 0.6s ease;"></path>
+            <!-- Prescribed 40 DPM Marker -->
+            <circle cx="65" cy="24" r="4" fill="#f59e0b" stroke="#070d18" stroke-width="2"></circle>
+          </svg>
+
+          <div class="dpm-number" id="dpmVal">40.0</div>
+          <div class="dpm-unit">DROPS / MINUTE</div>
+        </div>
+
+        <div class="dpm-footer">
+          <span>Prescribed: 40.0 DPM</span>
+          <span style="color: var(--green);">[ OK ] NOMINAL</span>
+        </div>
+      </div>
+
+      <!-- 2. VOLUME REMAINING -->
+      <div class="card">
+        <div class="card-header">
+          <span>IV Fluid Reservoir</span>
+          <span id="volPercentBadge" style="color: var(--cyan); font-weight: 700;">74%</span>
+        </div>
+
+        <div class="vol-body">
+          <div class="saline-flask">
+            <div class="saline-liquid-fill" id="liquidLevel" style="height: 74%;"></div>
+          </div>
+
+          <div class="vol-stats">
+            <div class="vol-huge"><span id="volRemVal">372.0</span> <span>/ 500 mL</span></div>
+            <div class="vol-row">
+              <span>Infused Volume:</span>
+              <strong id="volInfVal">128.0 mL</strong>
+            </div>
+            <div class="vol-row">
+              <span>Current Flow:</span>
+              <strong id="flowRateVal" style="color: var(--cyan);">120.0 mL/h</strong>
+            </div>
+            <div class="vol-row">
+              <span>Est. Completion:</span>
+              <strong id="etaVal" style="color: var(--green);">3h 06min</strong>
+            </div>
+          </div>
+        </div>
+
+        <div class="progress-bar-track">
+          <div class="progress-bar-fill" id="volProgressBar" style="width: 74%;"></div>
+        </div>
+      </div>
+
+      <!-- 3. ALERT STATUS INDICATORS (Report Table 7.1) -->
+      <div class="card">
+        <div class="card-header">
+          <span>Bedside Alert State</span>
+          <span style="font-size: 0.7rem; color: var(--text-dim);">Table 7.1</span>
+        </div>
+
+        <div class="master-alert-box master-alert-NORMAL" id="masterAlertBox">
+          <span class="material-symbols-outlined" id="masterAlertIcon" style="font-size: 18px;">check_circle</span>
+          <span id="masterAlertText">STATUS: NORMAL</span>
+        </div>
+
+        <div class="alert-lamps-list">
+          <div class="lamp-row is-active-normal" id="lampNormal">
+            <span>(o) Normal Infusion</span>
+            <div class="lamp-indicator-dot"></div>
+          </div>
+          <div class="lamp-row" id="lampLow">
+            <span>( ) Low Volume (&le; 50 mL)</span>
+            <div class="lamp-indicator-dot"></div>
+          </div>
+          <div class="lamp-row" id="lampNoFlow">
+            <span>( ) No Drop / Blockage (&gt; 30s)</span>
+            <div class="lamp-indicator-dot"></div>
+          </div>
+          <div class="lamp-row" id="lampFreeFlow">
+            <span>( ) Free Flow (&gt; 150 DPM)</span>
+            <div class="lamp-indicator-dot"></div>
+          </div>
+          <div class="lamp-row" id="lampRateErr">
+            <span>( ) Rate Deviation (&plusmn;20%)</span>
+            <div class="lamp-indicator-dot"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== FLOW RATE WAVEFORM GRAPH ==================== -->
+    <section class="chart-panel">
+      <div class="chart-top-bar">
+        <div class="chart-title-text">Live Flow Rate Waveform (Rolling 30-min window)</div>
+        <div class="chart-legend-box">
+          <div class="legend-entry">
+            <div class="legend-stripe" style="background: var(--cyan);"></div>
+            <span style="color: var(--cyan);">Flow Rate (mL/h)</span>
+          </div>
+          <div class="legend-entry">
+            <div class="legend-stripe" style="background: var(--green); height: 2px;"></div>
+            <span style="color: var(--green);">DPM</span>
+          </div>
+          <div class="legend-entry">
+            <div class="legend-stripe" style="border-top: 1px dashed var(--amber); height: 0;"></div>
+            <span style="color: var(--amber);">Prescribed (120 mL/h)</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="canvas-wrapper">
+        <!-- Canvas Element (Required for test_suite.py: customChartCanvas) -->
+        <canvas id="customChartCanvas"></canvas>
+      </div>
+
+      <!-- Quick Test Injector Buttons (For College Demo) -->
+      <div class="sim-bar">
+        <span class="sim-label">Demo Preset Triggers:</span>
+        <button class="btn-sim" onclick="injectReading(40.0, 370.0, 'NORMAL')">Normal (40 DPM)</button>
+        <button class="btn-sim" onclick="injectReading(40.0, 35.0, 'LOW_VOLUME')">Low Volume (&le;50 mL)</button>
+        <button class="btn-sim" onclick="injectReading(0.0, 250.0, 'NO_FLOW')">Tube Blockage (0 DPM)</button>
+        <button class="btn-sim" onclick="injectReading(160.0, 200.0, 'FREE_FLOW')">Free Flow (&gt;150 DPM)</button>
+        <button class="btn-sim" onclick="injectReading(65.0, 300.0, 'RATE_ERR')">Rate Drift (65 DPM)</button>
+      </div>
+    </section>
+
+    <!-- ==================== TELEMETRY LOG ==================== -->
+    <section class="log-panel">
+      <div class="log-top">
+        <span>Recent Telemetry Log</span>
+        <span id="logCount" style="color: var(--cyan);">0 Packets</span>
+      </div>
+
+      <div class="log-scroll-area">
+        <table>
+          <thead>
+            <tr>
+              <th>Timestamp</th>
+              <th>Device</th>
+              <th>DPM</th>
+              <th>Flow Rate</th>
+              <th>Remaining</th>
+              <th>Infused</th>
+              <th>State</th>
+            </tr>
+          </thead>
+          <tbody id="logTableBody">
+            <!-- Dynamically populated via API -->
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <footer>
+      Smart IoT IV Fluid Infusion Monitoring System • Bedside Telematics Node
+    </footer>
+  </div>
+
+  <!-- ==================== TELEMETRY SCRIPT ==================== -->
+  <script>
+    const DEVICE_ID = 'WARD-A-BED-07';
+    let chartData = [];
+    let isMuted = false;
+    let audioCtx = null;
+    let activeTone = null;
+
+    // Clock
+    function updateClock() {
+      const d = new Date();
+      document.getElementById('liveClock').innerText = 
+        String(d.getHours()).padStart(2, '0') + ':' +
+        String(d.getMinutes()).padStart(2, '0') + ':' +
+        String(d.getSeconds()).padStart(2, '0');
+    }
+    setInterval(updateClock, 1000);
+    updateClock();
+
+    // Audio Synthesizer & Local Time Helper
+    function formatLocalTime(tsStr) {
+      if (!tsStr) return '--:--:--';
+      let iso = String(tsStr).replace(' ', 'T');
+      if (!iso.endsWith('Z') && !iso.includes('+')) {
+        iso += 'Z';
+      }
+      const d = new Date(iso);
+      if (isNaN(d.getTime())) return tsStr.substring(0, 19);
+      return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+    }
+
+    function playTestBeep() {
+      try {
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(800, audioCtx.currentTime);
+        gain.gain.setValueAtTime(0.08, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.15);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.15);
+      } catch (e) {
+        console.error('Audio test failed:', e);
+      }
+    }
+
+    // Remote Bedside Buzzer Silence & Local Web Audio
+    let isBedsideSilenced = false;
+    let silenceCountdownInterval = null;
+    let silenceSecondsLeft = 0;
+
+    async function toggleRemoteBedsideSilence() {
+      const action = isBedsideSilenced ? 'unsilence' : 'silence';
+      const duration = isBedsideSilenced ? 0 : 120; // 2 minutes
+
+      playTestBeep(); // Audio feedback confirmation on click!
+
+      try {
+        const res = await fetch('/api/alarm/silence', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            device_id: DEVICE_ID,
+            action: action,
+            duration_sec: duration
+          })
+        });
+        const json = await res.json();
+        if (json.status === 'success') {
+          updateSilenceUI(json.bedside_silenced, json.silence_sec);
+        }
+      } catch (e) {
+        console.error('Silence request failed:', e);
+      }
+    }
+
+    function updateSilenceUI(silenced, seconds) {
+      isBedsideSilenced = Boolean(silenced);
+      silenceSecondsLeft = seconds || 0;
+      isMuted = isBedsideSilenced;
+      const btn = document.getElementById('buzzerBtn');
+      const icon = document.getElementById('buzzerIcon');
+      const text = document.getElementById('buzzerText');
+
+      clearInterval(silenceCountdownInterval);
+
+      if (isBedsideSilenced && silenceSecondsLeft > 0) {
+        icon.innerText = 'notifications_paused';
+        text.innerText = `Silenced (${silenceSecondsLeft}s)`;
+        btn.style.color = '#f59e0b';
+        btn.style.borderColor = 'rgba(245, 158, 11, 0.4)';
+        btn.style.background = 'rgba(245, 158, 11, 0.12)';
+
+        silenceCountdownInterval = setInterval(() => {
+          silenceSecondsLeft--;
+          if (silenceSecondsLeft <= 0) {
+            clearInterval(silenceCountdownInterval);
+            updateSilenceUI(false, 0);
+          } else {
+            text.innerText = `Silenced (${silenceSecondsLeft}s)`;
+          }
+        }, 1000);
+      } else {
+        icon.innerText = 'notifications_off';
+        text.innerText = 'Silence Bedside Buzzer';
+        btn.style.color = 'var(--text-muted)';
+        btn.style.borderColor = 'var(--card-border)';
+        btn.style.background = 'rgba(255, 255, 255, 0.04)';
+      }
+    }
+
+    function soundAlert(status) {
+      if (isMuted || status === 'NORMAL') return;
+      try {
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        if (activeTone) return;
+
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+
+        if (status === 'NO_FLOW' || status === 'FREE_FLOW') {
+          osc.type = 'sawtooth';
+          osc.frequency.setValueAtTime(880, audioCtx.currentTime);
+          gain.gain.setValueAtTime(0.06, audioCtx.currentTime);
+          osc.start();
+          setTimeout(() => { osc.stop(); activeTone = null; }, 400);
+        } else {
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(650, audioCtx.currentTime);
+          gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
+          osc.start();
+          setTimeout(() => { osc.stop(); activeTone = null; }, 250);
+        }
+        activeTone = osc;
+      } catch (e) {}
+    }
+
+    // Polling API
+    // ONLINE/OFFLINE threshold: if ESP32 hasn't sent telemetry in > 15s it's considered offline.
+    // The ESP32 posts every 2s during alarms, 5s normally, so 15s is a safe dead-band.
+    const OFFLINE_THRESHOLD_SEC = 15;
+
+    function setDeviceOnline(online, lastSeenSec) {
+      const pill = document.getElementById('linkStatusPill');
+      const dot  = document.getElementById('statusDot');
+      const txt  = document.getElementById('linkStatusText');
+
+      if (online) {
+        pill.style.color = 'var(--green)';
+        dot.style.background = 'var(--green)';
+        dot.style.boxShadow = '0 0 6px var(--green)';
+        txt.innerText = 'ONLINE';
+      } else {
+        pill.style.color = 'var(--red)';
+        dot.style.background = 'var(--red)';
+        dot.style.boxShadow = '0 0 6px var(--red)';
+        const ago = lastSeenSec != null ? `${lastSeenSec}s ago` : '';
+        txt.innerText = ago ? `OFFLINE · ${ago}` : 'OFFLINE';
+      }
+    }
+
+    async function fetchLatest() {
+      try {
+        const res = await fetch(`/api/latest/${DEVICE_ID}`);
+        if (!res.ok) throw new Error('API Error');
+        const json = await res.json();
+        if (json.status === 'success' && json.data) {
+          const ageSeconds = json.data.last_seen_seconds_ago ?? 0;
+          const isOnline = ageSeconds <= OFFLINE_THRESHOLD_SEC;
+          setDeviceOnline(isOnline, isOnline ? null : ageSeconds);
+          updateUI(json.data);
+        }
+      } catch (e) {
+        // Network error — Flask itself is unreachable
+        setDeviceOnline(false, null);
+      }
+    }
+
+    async function fetchHistory() {
+      try {
+        const res = await fetch(`/api/history/${DEVICE_ID}?limit=30`);
+        if (!res.ok) return;
+        const json = await res.json();
+        if (json.status === 'success' && Array.isArray(json.data)) {
+          chartData = json.data;
+          renderTable(json.data);
+          drawChart();
+        }
+      } catch (e) {}
+    }
+
+    function updateUI(d) {
+      const dpm = Number(d.dpm || 0);
+      const rem = Number(d.vol_remaining_ml || d.remaining_ml || 0);
+      const flow = Number(d.flow_ml_hr || (dpm * 3.0));
+      const infused = Number(d.vol_infused_ml || Math.max(0, 500 - rem));
+      const status = String(d.status || 'NORMAL').toUpperCase();
+
+      // DPM
+      document.getElementById('dpmVal').innerText = dpm.toFixed(1);
+      const pct = Math.min(Math.max(dpm / 150, 0), 1);
+      const offset = 140 - (pct * 140);
+      document.getElementById('gaugeArc').setAttribute('stroke-dashoffset', offset.toFixed(1));
+
+      // Drop pulse
+      const pulse = document.getElementById('dropPulseDot');
+      if (dpm > 0) {
+        pulse.style.opacity = '1';
+        setTimeout(() => pulse.style.opacity = '0.3', 150);
+      } else {
+        pulse.style.opacity = '0.1';
+      }
+
+      // Volume & Bottle
+      document.getElementById('volRemVal').innerText = rem.toFixed(1);
+      document.getElementById('volInfVal').innerText = `${infused.toFixed(1)} mL`;
+      document.getElementById('flowRateVal').innerText = `${flow.toFixed(1)} mL/h`;
+
+      const volPercent = Math.min(Math.max((rem / 500) * 100, 0), 100);
+      document.getElementById('volPercentBadge').innerText = `${volPercent.toFixed(0)}%`;
+      document.getElementById('liquidLevel').style.height = `${volPercent}%`;
+      document.getElementById('volProgressBar').style.width = `${volPercent}%`;
+
+      // ETA
+      if (flow > 0 && rem > 0) {
+        const totalMin = Math.round((rem / flow) * 60);
+        const h = Math.floor(totalMin / 60);
+        const m = totalMin % 60;
+        document.getElementById('etaVal').innerText = `${h}h ${String(m).padStart(2, '0')}min`;
+      } else if (rem <= 0) {
+        document.getElementById('etaVal').innerText = 'Depleted';
+      } else {
+        document.getElementById('etaVal').innerText = 'Stalled';
+      }
+
+      // Status Lamps & Remote Silence State
+      updateAlertStatus(status);
+      soundAlert(status);
+
+      if (d.bedside_silenced !== undefined && d.bedside_silenced !== isBedsideSilenced && silenceSecondsLeft <= 1) {
+        updateSilenceUI(d.bedside_silenced, d.silence_sec);
+      }
+
+      // Append chart data point if new
+      if (chartData.length === 0 || chartData[chartData.length - 1].id !== d.id) {
+        chartData.push(d);
+        if (chartData.length > 30) chartData.shift();
+        appendTableRow(d);
+        drawChart();
+      }
+    }
+
+    function updateAlertStatus(stat) {
+      const box = document.getElementById('masterAlertBox');
+      const text = document.getElementById('masterAlertText');
+      const icon = document.getElementById('masterAlertIcon');
+
+      box.className = `master-alert-box master-alert-${stat}`;
+
+      if (stat === 'NORMAL') {
+        text.innerText = 'STATUS: NORMAL';
+        icon.innerText = 'check_circle';
+      } else if (stat === 'LOW_VOLUME') {
+        text.innerText = 'ALARM: LOW VOLUME (≤50 mL)';
+        icon.innerText = 'warning';
+      } else if (stat === 'NO_FLOW') {
+        text.innerText = 'CRITICAL: NO FLOW / OCCLUSION';
+        icon.innerText = 'block';
+      } else if (stat === 'FREE_FLOW') {
+        text.innerText = 'CRITICAL: FREE FLOW (>150 DPM)';
+        icon.innerText = 'report';
+      } else if (stat === 'RATE_ERR') {
+        text.innerText = 'ALERT: RATE DEVIATION (±20%)';
+        icon.innerText = 'error_outline';
+      }
+
+      const lamps = {
+        NORMAL: document.getElementById('lampNormal'),
+        LOW_VOLUME: document.getElementById('lampLow'),
+        NO_FLOW: document.getElementById('lampNoFlow'),
+        FREE_FLOW: document.getElementById('lampFreeFlow'),
+        RATE_ERR: document.getElementById('lampRateErr')
+      };
+
+      Object.values(lamps).forEach(l => l.className = 'lamp-row');
+
+      if (stat === 'NORMAL') {
+        lamps.NORMAL.className = 'lamp-row is-active-normal';
+      } else if (stat === 'LOW_VOLUME') {
+        lamps.LOW_VOLUME.className = 'lamp-row is-active-warning';
+      } else if (stat === 'NO_FLOW') {
+        lamps.NO_FLOW.className = 'lamp-row is-active-danger';
+      } else if (stat === 'FREE_FLOW') {
+        lamps.FREE_FLOW.className = 'lamp-row is-active-danger';
+      } else if (stat === 'RATE_ERR') {
+        lamps.RATE_ERR.className = 'lamp-row is-active-warning';
+      }
+    }
+
+    // Canvas Chart Drawing (Smooth curve)
+    function drawChart() {
+      const canvas = document.getElementById('customChartCanvas');
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      const dpr = window.devicePixelRatio || 1;
+
+      const rect = canvas.getBoundingClientRect();
+      canvas.width = rect.width * dpr;
+      canvas.height = rect.height * dpr;
+      ctx.scale(dpr, dpr);
+
+      const w = rect.width;
+      const h = rect.height;
+
+      ctx.clearRect(0, 0, w, h);
+
+      const padL = 40;
+      const padR = 20;
+      const padT = 15;
+      const padB = 25;
+      const plotW = w - padL - padR;
+      const plotH = h - padT - padB;
+
+      const maxVal = 180;
+      const toY = (val) => padT + plotH - (Math.min(Math.max(val, 0), maxVal) / maxVal * plotH);
+
+      // Grid Lines
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.06)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 4]);
+
+      const ticks = [0, 60, 120, 180];
+      ctx.font = '10px "JetBrains Mono", monospace';
+      ctx.fillStyle = '#64748b';
+      ctx.textAlign = 'right';
+
+      ticks.forEach(t => {
+        const y = toY(t);
+        ctx.beginPath();
+        ctx.moveTo(padL, y);
+        ctx.lineTo(padL + plotW, y);
+        ctx.stroke();
+        ctx.fillText(`${t}`, padL - 6, y + 3);
+      });
+
+      // Prescribed Baseline (120 mL/h)
+      ctx.strokeStyle = '#f59e0b';
+      ctx.lineWidth = 1.2;
+      ctx.setLineDash([5, 3]);
+      const y120 = toY(120);
+      ctx.beginPath();
+      ctx.moveTo(padL, y120);
+      ctx.lineTo(padL + plotW, y120);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      if (!chartData || chartData.length === 0) return;
+
+      const stepX = chartData.length > 1 ? plotW / (chartData.length - 1) : plotW;
+
+      // Shaded Area under Flow Rate
+      const grad = ctx.createLinearGradient(0, padT, 0, padT + plotH);
+      grad.addColorStop(0, 'rgba(6, 182, 212, 0.2)');
+      grad.addColorStop(1, 'rgba(6, 182, 212, 0.0)');
+
+      ctx.beginPath();
+      chartData.forEach((pt, i) => {
+        const x = padL + (i * stepX);
+        const y = toY(pt.flow_ml_hr);
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      ctx.lineTo(padL + ((chartData.length - 1) * stepX), padT + plotH);
+      ctx.lineTo(padL, padT + plotH);
+      ctx.closePath();
+      ctx.fillStyle = grad;
+      ctx.fill();
+
+      // Flow Rate Line (Cyan)
+      ctx.strokeStyle = '#06b6d4';
+      ctx.lineWidth = 2.2;
+      ctx.beginPath();
+      chartData.forEach((pt, i) => {
+        const x = padL + (i * stepX);
+        const y = toY(pt.flow_ml_hr);
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      ctx.stroke();
+
+      // DPM Line (Green dashed)
+      ctx.strokeStyle = '#10b981';
+      ctx.lineWidth = 1.4;
+      ctx.setLineDash([3, 2]);
+      ctx.beginPath();
+      chartData.forEach((pt, i) => {
+        const x = padL + (i * stepX);
+        const y = toY(pt.dpm * 3.0);
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Current Point Dot
+      const lastIdx = chartData.length - 1;
+      const lastX = padL + (lastIdx * stepX);
+      const lastY = toY(chartData[lastIdx].flow_ml_hr);
+      ctx.fillStyle = '#06b6d4';
+      ctx.beginPath();
+      ctx.arc(lastX, lastY, 4, 0, Math.PI * 2);
+      ctx.fill();
+
+      // X-axis timestamps (Local client time)
+      ctx.fillStyle = '#64748b';
+      ctx.textAlign = 'center';
+      chartData.forEach((pt, i) => {
+        if (i % 6 === 0 || i === lastIdx) {
+          const x = padL + (i * stepX);
+          const timeStr = formatLocalTime(pt.ts);
+          ctx.fillText(timeStr, x, padT + plotH + 16);
+        }
+      });
+    }
+
+    // Event Log Table
+    function renderTable(rows) {
+      const tbody = document.getElementById('logTableBody');
+      tbody.innerHTML = '';
+      rows.slice().reverse().forEach(r => appendRow(r));
+      document.getElementById('logCount').innerText = `${rows.length} Packets`;
+    }
+
+    function appendTableRow(r) {
+      appendRow(r, true);
+    }
+
+    function appendRow(r, prepend = false) {
+      const tbody = document.getElementById('logTableBody');
+      const tr = document.createElement('tr');
+      const stat = String(r.status || 'NORMAL').toUpperCase();
+      const localTime = formatLocalTime(r.ts);
+
+      tr.innerHTML = `
+        <td title="${r.ts || ''}">${localTime}</td>
+        <td style="color: var(--cyan); font-weight: 600;">${r.device_id || r.bed_id}</td>
+        <td>${Number(r.dpm).toFixed(1)}</td>
+        <td>${Number(r.flow_ml_hr).toFixed(1)} mL/h</td>
+        <td>${Number(r.vol_remaining_ml || r.remaining_ml).toFixed(1)} mL</td>
+        <td>${Number(r.vol_infused_ml || (500 - (r.vol_remaining_ml || 500))).toFixed(1)} mL</td>
+        <td><span class="badge-tag badge-${stat}">${stat}</span></td>
+      `;
+
+      if (prepend && tbody.firstChild) {
+        tbody.insertBefore(tr, tbody.firstChild);
+        if (tbody.children.length > 30) {
+          tbody.removeChild(tbody.lastChild);
+        }
+      } else {
+        tbody.appendChild(tr);
+      }
+      document.getElementById('logCount').innerText = `${tbody.children.length} Packets`;
+    }
+
+    // Demo Injection
+    async function injectReading(dpm, rem, stat) {
+      const payload = {
+        device_id: DEVICE_ID,
+        dpm: dpm,
+        flow_ml_hr: dpm * 3.0,
+        vol_remaining_ml: rem,
+        vol_infused_ml: Math.max(0, 500.0 - rem),
+        status: stat
+      };
+      try {
+        await fetch('/api/telemetry', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        fetchLatest();
+      } catch (e) {}
+    }
+
+    window.addEventListener('resize', drawChart);
+
+    // Initial Load & 2-Second Polling Loop
+    window.addEventListener('DOMContentLoaded', () => {
+      fetchHistory();
+      fetchLatest();
+      setInterval(fetchLatest, 2000);
+    });
+  </script>
+</body>
+</html>
