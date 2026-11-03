@@ -24,8 +24,9 @@ portMUX_TYPE isrMux = portMUX_INITIALIZER_UNLOCKED;
 
 volatile unsigned long volatileDropCount = 0;
 volatile unsigned long lastDropMicros    = 0;
-volatile unsigned long dropIntervalsUs[DPM_AVG_WINDOW] = {1500000, 1500000, 1500000, 1500000, 1500000};
+volatile unsigned long dropIntervalsUs[DPM_AVG_WINDOW] = {0, 0, 0, 0, 0};
 volatile uint8_t intervalIndex          = 0;
+volatile uint8_t validIntervalCount     = 0;
 volatile bool flagNewDropEvent           = false;
 
 // -------------------------------------------------------------------------------------
@@ -37,12 +38,14 @@ unsigned long lastTelemetryMillis    = 0;
 unsigned long lastFetchMillis        = 0;
 unsigned long lastWiFiRetryMillis    = 0;
 unsigned long lastBufferRetryMillis  = 0;
+unsigned long dropLedOffMillis       = 0;
 
+float activeBottleVolMl              = INITIAL_BOTTLE_VOL_ML;
 float currentDpm                     = 0.0f;
 float currentFlowMlHr                = 0.0f;
 float currentVolInfusedMl            = 0.0f;
 float currentVolRemainingMl          = INITIAL_BOTTLE_VOL_ML;
-ClinicalStatus currentStatus         = STATUS_NORMAL;
+ClinicalStatus currentStatus         = STATUS_NO_FLOW;
 
 // Offline Circular Ring Buffer (Stores up to 60 packets during Wi-Fi disconnect)
 TelemetryPacket ringBuffer[RING_BUFFER_CAPACITY];
@@ -65,15 +68,24 @@ void IRAM_ATTR isrDropDetected() {
     unsigned long nowUs = micros();
     unsigned long diffUs = nowUs - lastDropMicros;
 
-    // 60 ms debounce hardware filter (Report Section 7.2)
-    // Even an extreme gravity free-flow (>150 DPM) has drop intervals > 350 ms
-    if (diffUs >= DEBOUNCE_MICROS) {
-        lastDropMicros = nowUs;
-
+    // Hardware debounce filter (Report Section 7.2)
+    if (lastDropMicros == 0 || diffUs >= DEBOUNCE_MICROS) {
         portENTER_CRITICAL_ISR(&isrMux);
+        // Only treat diffUs as a continuous drop interval if drop occurred within 15 seconds
+        if (lastDropMicros > 0 && diffUs <= 15000000UL) {
+            dropIntervalsUs[intervalIndex] = diffUs;
+            intervalIndex = (intervalIndex + 1) % DPM_AVG_WINDOW;
+            if (validIntervalCount < DPM_AVG_WINDOW) {
+                validIntervalCount = validIntervalCount + 1;
+            }
+        } else {
+            // First drop or drop after a long pause: reset interval buffer
+            validIntervalCount = 0;
+            intervalIndex = 0;
+        }
+
+        lastDropMicros = nowUs;
         volatileDropCount = volatileDropCount + 1;
-        dropIntervalsUs[intervalIndex] = diffUs;
-        intervalIndex = (intervalIndex + 1) % DPM_AVG_WINDOW;
         flagNewDropEvent = true;
         portEXIT_CRITICAL_ISR(&isrMux);
     }
@@ -92,7 +104,7 @@ void initTelematicsHardware() {
     digitalWrite(PIN_BUZZER, LOW);
     digitalWrite(PIN_STATUS_LED, LOW);
 
-    // Initial hardware test chirp (2 short beeps)
+    // Initial hardware test chirp (2 short beeps & blinks)
     for (int i = 0; i < 2; i++) {
         digitalWrite(PIN_BUZZER, HIGH);
         digitalWrite(PIN_STATUS_LED, HIGH);
@@ -106,8 +118,19 @@ void initTelematicsHardware() {
     attachInterrupt(digitalPinToInterrupt(PIN_TCRT5000_DO), isrDropDetected, FALLING);
     Serial.println("[ISR] Attached external interrupt on GPIO 19 (FALLING edge).");
 
-    lastDropMillis = millis();
-    lastDropMicros = micros();
+    // Diagnostic sensor status check
+    int sensorRaw = digitalRead(PIN_TCRT5000_DO);
+    Serial.printf("[SENSOR] TCRT5000 DO (GPIO %d) initial state: %s\n",
+                  PIN_TCRT5000_DO, (sensorRaw == HIGH) ? "HIGH (Idle - beam clear)" : "LOW (Triggered - beam blocked/reflecting)");
+    if (sensorRaw == LOW) {
+        Serial.println("[SENSOR WARNING] DO pin is reading LOW while idle!");
+        Serial.println("[SENSOR WARNING] If no drop is in the chamber, adjust the blue potentiometer on the TCRT5000 module until its D0 LED turns OFF.");
+    } else {
+        Serial.println("[SENSOR OK] Sensor DO is HIGH (idle). The second LED on the sensor will blink on each drop.");
+    }
+
+    lastDropMillis = 0;
+    lastDropMicros = 0;
 }
 
 // -------------------------------------------------------------------------------------
@@ -146,12 +169,14 @@ void connectWiFi() {
 void updateTelematicsCalculations() {
     unsigned long localDropCount = 0;
     unsigned long localIntervals[DPM_AVG_WINDOW];
+    uint8_t localValidCount = 0;
     bool localNewDrop = false;
 
     // Critical section to safely read volatile ISR variables
     portENTER_CRITICAL(&isrMux);
-    localDropCount = volatileDropCount;
-    localNewDrop   = flagNewDropEvent;
+    localDropCount   = volatileDropCount;
+    localNewDrop     = flagNewDropEvent;
+    localValidCount  = validIntervalCount;
     flagNewDropEvent = false;
     for (int i = 0; i < DPM_AVG_WINDOW; i++) {
         localIntervals[i] = dropIntervalsUs[i];
@@ -160,42 +185,60 @@ void updateTelematicsCalculations() {
 
     if (localNewDrop) {
         lastDropMillis = millis();
-        // Visual drop tick indicator on onboard blue LED
+        // Visual drop tick indicator: keep status LED ON for 50ms (bright, human-visible blink)
+        dropLedOffMillis = millis() + 50;
         digitalWrite(PIN_STATUS_LED, HIGH);
-        delayMicroseconds(2000);
-        digitalWrite(PIN_STATUS_LED, LOW);
+        Serial.printf("[DROP DETECTED] Drop #%lu | DO Pin Active\n", localDropCount);
     }
 
     totalDropCountSnapshot = localDropCount;
 
-    // Compute moving average drop interval
-    unsigned long sumIntervals = 0;
-    for (int i = 0; i < DPM_AVG_WINDOW; i++) {
-        sumIntervals += localIntervals[i];
+    // Compute moving average drop interval only over valid measured drop intervals
+    float meanIntervalUs = 0.0f;
+    if (localValidCount > 0) {
+        unsigned long sumIntervals = 0;
+        for (int i = 0; i < localValidCount; i++) {
+            sumIntervals += localIntervals[i];
+        }
+        meanIntervalUs = (float)sumIntervals / (float)localValidCount;
     }
-    float meanIntervalUs = (float)sumIntervals / (float)DPM_AVG_WINDOW;
 
-    // Check for drop timeout (No drop detected for > 30s)
-    unsigned long timeSinceLastDrop = millis() - lastDropMillis;
-    if (timeSinceLastDrop > NO_FLOW_TIMEOUT_MS) {
+    // Time elapsed since the last registered drop
+    unsigned long timeSinceLastDrop = (lastDropMillis > 0) ? (millis() - lastDropMillis) : NO_FLOW_TIMEOUT_MS;
+
+    // Check if drops have stopped completely or no drops ever occurred
+    if (totalDropCountSnapshot == 0 || timeSinceLastDrop >= NO_FLOW_TIMEOUT_MS) {
         currentDpm = 0.0f;
     } else if (meanIntervalUs > 0) {
-        // DPM = 60,000,000 µs / mean interval in µs (Report Section 7.3)
-        currentDpm = 60000000.0f / meanIntervalUs;
+        float expectedIntervalMs = meanIntervalUs / 1000.0f;
+        // If elapsed time is more than 2.5x the expected drop interval (or > 4s), drops have stopped
+        if (timeSinceLastDrop > 4000 && timeSinceLastDrop > (expectedIntervalMs * 2.5f)) {
+            currentDpm = 0.0f;
+        } else {
+            currentDpm = 60000000.0f / meanIntervalUs;
+            if (timeSinceLastDrop > 2500) {
+                float instantDpm = 60000.0f / (float)timeSinceLastDrop;
+                if (instantDpm < currentDpm) {
+                    currentDpm = instantDpm;
+                }
+            }
+        }
+    } else {
+        // Only 1 drop registered so far; waiting for second drop to calculate rate
+        currentDpm = 0.0f;
     }
 
     // Flow Rate (mL/h) = DPM * 60 / DF (Report Section 7.4)
-    // For Macro set (DF = 20): Flow = DPM * 3
     currentFlowMlHr = (currentDpm * 60.0f) / DRIP_FACTOR;
 
     // Volume Infused (mL) = total drops / DF
     currentVolInfusedMl = (float)totalDropCountSnapshot / DRIP_FACTOR;
 
-    // Volume Remaining (mL) = Bag Volume - Volume Infused
-    if (currentVolInfusedMl >= INITIAL_BOTTLE_VOL_ML) {
+    // Volume Remaining (mL) = Container Volume - Volume Infused
+    if (currentVolInfusedMl >= activeBottleVolMl) {
         currentVolRemainingMl = 0.0f;
     } else {
-        currentVolRemainingMl = INITIAL_BOTTLE_VOL_ML - currentVolInfusedMl;
+        currentVolRemainingMl = activeBottleVolMl - currentVolInfusedMl;
     }
 }
 
@@ -203,15 +246,15 @@ void updateTelematicsCalculations() {
 // 5. EDGE ALERT CLASSIFIER (Report Table 7.1)
 // -------------------------------------------------------------------------------------
 void evaluateClinicalAlerts() {
-    unsigned long elapsedSinceDrop = millis() - lastDropMillis;
+    unsigned long elapsedSinceDrop = (lastDropMillis > 0) ? (millis() - lastDropMillis) : NO_FLOW_TIMEOUT_MS;
 
-    // 1. Low Volume Alert (≤ 50 mL / ≤ 10% of 500 mL bag)
-    if (currentVolRemainingMl <= LOW_VOLUME_THRESHOLD) {
-        currentStatus = STATUS_LOW_VOLUME;
-    }
-    // 2. No Drop / Occlusion Alert (no drop for > 30s)
-    else if (elapsedSinceDrop >= NO_FLOW_TIMEOUT_MS) {
+    // 1. No Drop / Occlusion Alert (Highest Priority when line is blocked or drops stopped)
+    if (totalDropCountSnapshot == 0 || currentDpm <= 0.5f || elapsedSinceDrop >= NO_FLOW_TIMEOUT_MS) {
         currentStatus = STATUS_NO_FLOW;
+    }
+    // 2. Low Volume Alert (≤ 30 mL / ≤ 15% of 200 mL container)
+    else if (currentVolRemainingMl <= LOW_VOLUME_THRESHOLD) {
+        currentStatus = STATUS_LOW_VOLUME;
     }
     // 3. Free Flow Runaway Alarm (> 150 DPM)
     else if (currentDpm > FREE_FLOW_DPM_LIMIT) {
@@ -234,14 +277,13 @@ void evaluateClinicalAlerts() {
 void handleAcousticAndVisualIndicators() {
     unsigned long now = millis();
     bool isBedsideSilenced = (now < bedsideSilenceUntilMillis);
+    bool isDropFlashing    = (now < dropLedOffMillis);
 
     // --- IMMEDIATE SILENCE CUT ---
     // If bedside silence is active AND the buzzer is currently physically ON,
     // cut it immediately without waiting for the next timer tick.
-    // This eliminates the residual chirp when silence arrives mid-beep.
     if (isBedsideSilenced && digitalRead(PIN_BUZZER) == HIGH) {
         digitalWrite(PIN_BUZZER, LOW);
-        // Don't reset buzzerState so LED visual pattern continues unaffected.
     }
 
     switch (currentStatus) {
@@ -252,7 +294,7 @@ void handleAcousticAndVisualIndicators() {
                 buzzerBeepTimer = now;
                 buzzerState = !buzzerState;
                 digitalWrite(PIN_BUZZER, (buzzerState && !isBedsideSilenced) ? HIGH : LOW);
-                digitalWrite(PIN_STATUS_LED, buzzerState ? HIGH : LOW);
+                digitalWrite(PIN_STATUS_LED, buzzerState ? HIGH : (isDropFlashing ? HIGH : LOW));
             }
             break;
 
@@ -263,7 +305,7 @@ void handleAcousticAndVisualIndicators() {
                 buzzerBeepTimer = now;
                 buzzerState = !buzzerState;
                 digitalWrite(PIN_BUZZER, (buzzerState && !isBedsideSilenced) ? HIGH : LOW);
-                digitalWrite(PIN_STATUS_LED, buzzerState ? HIGH : LOW);
+                digitalWrite(PIN_STATUS_LED, buzzerState ? HIGH : (isDropFlashing ? HIGH : LOW));
             }
             break;
 
@@ -274,7 +316,7 @@ void handleAcousticAndVisualIndicators() {
                 buzzerBeepTimer = now;
                 buzzerState = !buzzerState;
                 digitalWrite(PIN_BUZZER, (buzzerState && !isBedsideSilenced) ? HIGH : LOW);
-                digitalWrite(PIN_STATUS_LED, buzzerState ? HIGH : LOW);
+                digitalWrite(PIN_STATUS_LED, buzzerState ? HIGH : (isDropFlashing ? HIGH : LOW));
             }
             break;
 
@@ -284,15 +326,15 @@ void handleAcousticAndVisualIndicators() {
                 buzzerBeepTimer = now;
                 buzzerState = !buzzerState;
                 digitalWrite(PIN_BUZZER, (buzzerState && !isBedsideSilenced) ? HIGH : LOW);
-                digitalWrite(PIN_STATUS_LED, buzzerState ? HIGH : LOW);
+                digitalWrite(PIN_STATUS_LED, buzzerState ? HIGH : (isDropFlashing ? HIGH : LOW));
             }
             break;
 
         case STATUS_NORMAL:
         default:
-            // Normal - Silence buzzer and LED
+            // Normal Infusion: Buzzer OFF, LED blinks for 50ms upon each drop, otherwise OFF
             digitalWrite(PIN_BUZZER, LOW);
-            digitalWrite(PIN_STATUS_LED, LOW);
+            digitalWrite(PIN_STATUS_LED, isDropFlashing ? HIGH : LOW);
             buzzerState = false;
             break;
     }
@@ -352,12 +394,13 @@ bool sendTelemetryToGateway(const TelemetryPacket& packet) {
     http.setTimeout(5000);
 
     StaticJsonDocument<256> doc;
-    doc["device_id"]       = packet.deviceId;
-    doc["dpm"]             = round(packet.dpm * 10.0f) / 10.0f;
-    doc["flow_ml_hr"]      = round(packet.flowMlHr * 10.0f) / 10.0f;
-    doc["vol_infused_ml"]  = round(packet.volInfusedMl * 10.0f) / 10.0f;
-    doc["vol_remaining_ml"]= round(packet.volRemainingMl * 10.0f) / 10.0f;
-    doc["status"]          = packet.status;
+    doc["device_id"]        = packet.deviceId;
+    doc["dpm"]              = round(packet.dpm * 10.0f) / 10.0f;
+    doc["flow_ml_hr"]       = round(packet.flowMlHr * 10.0f) / 10.0f;
+    doc["vol_infused_ml"]   = round(packet.volInfusedMl * 10.0f) / 10.0f;
+    doc["vol_remaining_ml"] = round(packet.volRemainingMl * 10.0f) / 10.0f;
+    doc["container_vol_ml"] = round(activeBottleVolMl * 10.0f) / 10.0f;
+    doc["status"]           = packet.status;
 
     String jsonPayload;
     serializeJson(doc, jsonPayload);
@@ -376,8 +419,8 @@ bool sendTelemetryToGateway(const TelemetryPacket& packet) {
                 bedsideSilenceUntilMillis = 0;
             }
         }
-        Serial.printf("[POST OK] %s | DPM: %.1f | Flow: %.1f mL/h | Rem: %.1f mL | Status: %s (HTTP %d) | Silenced: %s\n",
-                      packet.deviceId, packet.dpm, packet.flowMlHr, packet.volRemainingMl, packet.status, httpCode,
+        Serial.printf("[POST OK] %s | DPM: %.1f | Flow: %.1f mL/h | Rem: %.1f/%.1f mL | Status: %s (HTTP %d) | Silenced: %s\n",
+                      packet.deviceId, packet.dpm, packet.flowMlHr, packet.volRemainingMl, activeBottleVolMl, packet.status, httpCode,
                       (millis() < bedsideSilenceUntilMillis) ? "YES" : "NO");
     } else {
         Serial.printf("[POST FAIL] HTTP Error: %d | Host: %s\n", httpCode, TELEMETRY_POST_URL);
@@ -417,6 +460,16 @@ bool fetchDashboardPrescription() {
             if (targetFlow > 0 && targetFlow <= 500) {
                 activePrescribedFlow = targetFlow;
             }
+            float cVol = 0.0f;
+            if (data.containsKey("container_vol_ml")) {
+                cVol = data["container_vol_ml"].as<float>();
+            } else if (data.containsKey("bottle_vol_ml")) {
+                cVol = data["bottle_vol_ml"].as<float>();
+            }
+            if (cVol >= 50.0f && cVol <= 2000.0f && fabs(cVol - activeBottleVolMl) > 0.5f) {
+                activeBottleVolMl = cVol;
+                Serial.printf("[FETCH SYNC] Container volume synchronized from dashboard: %.1f mL\n", activeBottleVolMl);
+            }
             if (data.containsKey("bedside_silenced")) {
                 if (data["bedside_silenced"].as<bool>()) {
                     unsigned long sec = data["silence_sec"] | 120;
@@ -425,8 +478,8 @@ bool fetchDashboardPrescription() {
                     bedsideSilenceUntilMillis = 0;
                 }
             }
-            Serial.printf("[FETCH SYNC] Dashboard verified | Prescribed: %.1f mL/h | Silenced: %s\n",
-                          activePrescribedFlow, (millis() < bedsideSilenceUntilMillis) ? "YES" : "NO");
+            Serial.printf("[FETCH SYNC] Dashboard verified | Prescribed: %.1f mL/h | Container: %.1f mL | Silenced: %s\n",
+                          activePrescribedFlow, activeBottleVolMl, (millis() < bedsideSilenceUntilMillis) ? "YES" : "NO");
         }
         http.end();
         return true;

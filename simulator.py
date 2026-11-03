@@ -83,12 +83,12 @@ def run_simulator(mode="normal", initial_vol=500.0, interval=5.0):
         drops_in_interval = (dpm / 60.0) * interval
         ml_consumed = drops_in_interval / DRIP_FACTOR
         current_vol = max(0.0, current_vol - ml_consumed)
-        vol_infused = max(0.0, 500.0 - current_vol)
+        vol_infused = max(0.0, float(initial_vol) - current_vol)
 
         # Flow in mL/h = DPM * 60 / 20 = DPM * 3
         flow_ml_hr = round((dpm * 60.0) / DRIP_FACTOR, 1)
 
-        if current_vol <= 50.0 and status != "NO_FLOW":
+        if current_vol <= 30.0 and status != "NO_FLOW":
             status = "LOW_VOLUME"
 
         payload = {
@@ -97,6 +97,7 @@ def run_simulator(mode="normal", initial_vol=500.0, interval=5.0):
             "flow_ml_hr": flow_ml_hr,
             "vol_infused_ml": round(vol_infused, 1),
             "vol_remaining_ml": round(current_vol, 1),
+            "container_vol_ml": float(initial_vol),
             "status": status
         }
 

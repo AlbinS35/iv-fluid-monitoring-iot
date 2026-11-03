@@ -41,6 +41,9 @@ pg_pool = None
 # Bedside Remote Alarm Silence Registry: { device_id: expiry_epoch }
 bedside_silence_registry = {}
 
+# Bedside IV Container Volume Registry: { device_id: bottle_volume_ml }
+device_container_registry = {'WARD-A-BED-07': 200.0}
+
 def is_bedside_silenced(device_id: str):
     """Checks if a device has an active remote silence acknowledgment."""
     dev = str(device_id or "").strip().upper()
@@ -204,6 +207,15 @@ def release_db_connection(conn):
 def normalize_status(status_str, dpm, vol_remaining):
     """Normalizes status to match Report Table 7.1 and Table 9.2."""
     s = str(status_str or "").strip().upper()
+
+    # Physical telemetry thresholds take precedence over incorrect/stale status strings
+    if vol_remaining <= 50.0:  # <= 10% of 500mL
+        return "LOW_VOLUME"
+    if dpm > 150.0:
+        return "FREE_FLOW"
+    if dpm <= 1.0:  # No drops detected or line blocked
+        return "NO_FLOW"
+
     if s in {"NORMAL", "LOW_VOLUME", "NO_FLOW", "FREE_FLOW", "RATE_ERR"}:
         return s
     
@@ -212,13 +224,6 @@ def normalize_status(status_str, dpm, vol_remaining):
     if s == "DEPLETED": return "LOW_VOLUME"
     if s == "RAPID": return "FREE_FLOW"
 
-    # Auto-detection based on thresholds
-    if vol_remaining <= 50.0:  # <= 10% of 500mL
-        return "LOW_VOLUME"
-    if dpm > 150.0:
-        return "FREE_FLOW"
-    if dpm <= 1.0:
-        return "NO_FLOW"
     return "NORMAL"
 
 
@@ -281,15 +286,26 @@ def ingest_telemetry():
     try:
         dpm = max(0.0, float(payload.get('dpm', 0.0)))
         
+        # Check if packet contains container/bottle volume
+        if payload.get('container_vol_ml') or payload.get('bottle_vol_ml'):
+            try:
+                c_vol = float(payload.get('container_vol_ml') or payload.get('bottle_vol_ml'))
+                if 50.0 <= c_vol <= 2000.0:
+                    device_container_registry[device_id] = c_vol
+            except (ValueError, TypeError):
+                pass
+
+        total_container_vol = device_container_registry.get(device_id, 200.0)
+
         # Remaining volume (accepts vol_remaining_ml or remaining_ml)
-        vol_remaining = float(payload.get('vol_remaining_ml') or payload.get('remaining_ml') or 500.0)
+        vol_remaining = float(payload.get('vol_remaining_ml') or payload.get('remaining_ml') or total_container_vol)
         vol_remaining = max(0.0, vol_remaining)
         
         # Flow rate in mL/hr: DPM * 60 / 20 = DPM * 3 (Macro 20 gtt/mL)
         flow_ml_hr = float(payload.get('flow_ml_hr') or (dpm * 3.0))
         
         # Infused volume
-        vol_infused = float(payload.get('vol_infused_ml') or max(0.0, 500.0 - vol_remaining))
+        vol_infused = float(payload.get('vol_infused_ml') or max(0.0, total_container_vol - vol_remaining))
     except (ValueError, TypeError):
         return jsonify({"status": "error", "message": "Numeric fields must be valid numbers."}), 422
 
@@ -332,8 +348,8 @@ def ingest_telemetry():
 
         conn.commit()
 
-        logger.info("[INGEST] %s | Flow: %.1f DPM (%.1f mL/h) | Rem: %.1f mL | %s (ID: %d)",
-                    device_id, dpm, flow_ml_hr, vol_remaining, status, new_id)
+        logger.info("[INGEST] %s | Flow: %.1f DPM (%.1f mL/h) | Rem: %.1f/%.1f mL | %s (ID: %d)",
+                    device_id, dpm, flow_ml_hr, vol_remaining, total_container_vol, status, new_id)
 
         silenced, rem_sec = is_bedside_silenced(device_id)
 
@@ -349,6 +365,8 @@ def ingest_telemetry():
                 "vol_infused_ml": vol_infused,
                 "vol_remaining_ml": vol_remaining,
                 "remaining_ml": vol_remaining,
+                "container_vol_ml": total_container_vol,
+                "bottle_vol_ml": total_container_vol,
                 "status": status,
                 "ts": ts_val
             },
@@ -393,6 +411,8 @@ def get_latest_telemetry(device_id):
         cur.execute(query, (device_id,))
         row = cur.fetchone()
 
+        total_container = device_container_registry.get(device_id, 200.0)
+
         if not row:
             return jsonify({
                 "status": "nodata",
@@ -403,9 +423,11 @@ def get_latest_telemetry(device_id):
                     "dpm": 0.0,
                     "flow_ml_hr": 0.0,
                     "vol_infused_ml": 0.0,
-                    "vol_remaining_ml": 500.0,
-                    "remaining_ml": 500.0,
-                    "status": "NORMAL",
+                    "vol_remaining_ml": total_container,
+                    "remaining_ml": total_container,
+                    "container_vol_ml": total_container,
+                    "bottle_vol_ml": total_container,
+                    "status": "NO_FLOW",
                     "ts": datetime.now(timezone.utc).isoformat()
                 }
             }), 200
@@ -437,6 +459,8 @@ def get_latest_telemetry(device_id):
                 "vol_infused_ml": round(float(row['vol_infused_ml']), 1),
                 "vol_remaining_ml": round(float(row['vol_remaining_ml']), 1),
                 "remaining_ml": round(float(row['vol_remaining_ml']), 1),
+                "container_vol_ml": total_container,
+                "bottle_vol_ml": total_container,
                 "status": row['status'],
                 "ts": ts_val,
                 "created_at": ts_val,
@@ -454,6 +478,37 @@ def get_latest_telemetry(device_id):
     finally:
         if conn:
             release_db_connection(conn)
+
+
+@app.route('/api/container', methods=['POST', 'GET'])
+def manage_container_volume():
+    """Configure or read the IV container volume (e.g. 150 mL, 200 mL, 500 mL)."""
+    if request.method == 'POST':
+        payload = request.get_json(silent=True) or {}
+        device_id = str(payload.get('device_id') or 'WARD-A-BED-07').strip().upper()
+        try:
+            vol = float(payload.get('container_vol_ml') or payload.get('bottle_vol_ml') or 200.0)
+            vol = max(50.0, min(vol, 2000.0))
+            device_container_registry[device_id] = vol
+            logger.info("[CONTAINER] Set %s bottle volume to %.1f mL", device_id, vol)
+            return jsonify({
+                "status": "success",
+                "device_id": device_id,
+                "container_vol_ml": vol,
+                "bottle_vol_ml": vol,
+                "message": f"Container volume updated to {vol:.0f} mL for {device_id}."
+            }), 200
+        except (ValueError, TypeError):
+            return jsonify({"status": "error", "message": "Invalid volume numeric value."}), 422
+    else:
+        device_id = str(request.args.get('device_id') or 'WARD-A-BED-07').strip().upper()
+        vol = device_container_registry.get(device_id, 200.0)
+        return jsonify({
+            "status": "success",
+            "device_id": device_id,
+            "container_vol_ml": vol,
+            "bottle_vol_ml": vol
+        }), 200
 
 
 @app.route('/api/alarm/silence', methods=['POST'])
@@ -612,10 +667,7 @@ def seed_baseline_if_empty():
         if count == 0:
             logger.info("Seeding initial baseline packets for %s...", dev_id)
             baseline = [
-                (40.0, 120.0, 100.0, 400.0, 'NORMAL'),
-                (42.0, 126.0, 106.0, 394.0, 'NORMAL'),
-                (39.5, 118.5, 112.0, 388.0, 'NORMAL'),
-                (40.0, 120.0, 118.0, 382.0, 'NORMAL'),
+                (0.0, 0.0, 0.0, 200.0, 'NO_FLOW'),
             ]
             for dpm, flow, infused, remaining, stat in baseline:
                 if db_engine == "POSTGRES":

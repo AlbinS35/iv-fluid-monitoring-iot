@@ -47,12 +47,12 @@ const uint8_t PIN_LED       = 2;   // Onboard Blue Status LED
 
 // Infusion Parameters (Report Section 7.4)
 const float DRIP_FACTOR           = 20.0f;  // Macro Set: 20 drops = 1 mL
-const float INITIAL_BOTTLE_VOL_ML = 500.0f; // Standard IV saline bag volume
+const float INITIAL_BOTTLE_VOL_ML = 200.0f; // Matches user's 150-200 mL IV container
 const float PRESCRIBED_FLOW_ML_HR = 120.0f; // Prescribed rate for rate-deviation alert (40 DPM)
 
 // Alert Timing Thresholds (Report Table 7.1)
-const unsigned long NO_FLOW_TIMEOUT_MS  = 30000; // No drop for >30s -> Blockage / Empty bag
-const unsigned long DEBOUNCE_MICROS     = 60000; // 60 ms debounce lock (Report Section 7.2)
+const unsigned long NO_FLOW_TIMEOUT_MS  = 8000;  // 8s no drop -> Blockage / Occlusion alarm
+const unsigned long DEBOUNCE_MICROS     = 50000; // 50 ms debounce lock (Report Section 7.2)
 const unsigned long TELEMETRY_PERIOD_MS = 5000;  // 5 seconds transmission period (Report 7.6)
 
 // -------------------------------------------------------------------------------------
@@ -65,8 +65,9 @@ const unsigned long TELEMETRY_PERIOD_MS = 5000;  // 5 seconds transmission perio
 // Volatile Interrupt Variables
 volatile unsigned long volatileDropCount = 0;
 volatile unsigned long lastDropMicros    = 0;
-volatile unsigned long dropIntervalsUs[5] = {1500000, 1500000, 1500000, 1500000, 1500000};
+volatile unsigned long dropIntervalsUs[5] = {0, 0, 0, 0, 0};
 volatile uint8_t intervalIndex          = 0;
+volatile uint8_t validIntervalCount     = 0;
 volatile bool flagNewDrop               = false;
 
 // Polling Fallback State (used when USE_HARDWARE_INTERRUPTS == 0)
@@ -79,7 +80,7 @@ float volumeInfusedMl        = 0.0f;
 float volumeRemainingMl      = INITIAL_BOTTLE_VOL_ML;
 float currentDpm             = 0.0f;
 float currentFlowMlHr        = 0.0f;
-String currentStatus         = "NORMAL";
+String currentStatus         = "NO_FLOW";
 unsigned long lastDropMs     = 0;
 unsigned long lastTelemetryMs= 0;
 
@@ -103,15 +104,19 @@ void IRAM_ATTR isrDropDetected() {
     unsigned long nowUs = micros();
     unsigned long diff = nowUs - lastDropMicros;
     
-    // 60 ms debounce filter (Report Section 7.2)
-    if (diff >= DEBOUNCE_MICROS) {
+    // Hardware debounce filter (Report Section 7.2)
+    if (lastDropMicros == 0 || diff >= DEBOUNCE_MICROS) {
+        if (lastDropMicros > 0 && diff <= 15000000UL) {
+            dropIntervalsUs[intervalIndex] = diff;
+            intervalIndex = (intervalIndex + 1) % 5;
+            if (validIntervalCount < 5) validIntervalCount++;
+        } else {
+            validIntervalCount = 0;
+            intervalIndex = 0;
+        }
+
         lastDropMicros = nowUs;
         volatileDropCount++;
-        
-        // Store interval for moving average
-        dropIntervalsUs[intervalIndex] = diff;
-        intervalIndex = (intervalIndex + 1) % 5;
-        
         flagNewDrop = true;
     }
 }
@@ -184,12 +189,13 @@ void loop() {
     if (currentMillis - lastTelemetryMs >= TELEMETRY_PERIOD_MS) {
         lastTelemetryMs = currentMillis;
 
-        // Atomically snapshot and compute DPM using moving-average of 5 intervals (Report 7.3)
+        // Atomically snapshot and compute DPM using moving-average of valid intervals
         noInterrupts();
         unsigned long snapshotDrops = volatileDropCount;
         volatileDropCount = 0;
         unsigned long sumUs = 0;
-        for (int i = 0; i < 5; i++) {
+        uint8_t countValid = validIntervalCount;
+        for (int i = 0; i < countValid; i++) {
             sumUs += dropIntervalsUs[i];
         }
         interrupts();
@@ -197,12 +203,18 @@ void loop() {
         totalDropCount += snapshotDrops;
 
         // DPM & Flow Rate Mathematics (Report Section 7.3 & 7.4)
-        unsigned long timeSinceLastDrop = currentMillis - lastDropMs;
-        if (timeSinceLastDrop >= NO_FLOW_TIMEOUT_MS) {
+        unsigned long timeSinceLastDrop = (lastDropMs > 0) ? (currentMillis - lastDropMs) : NO_FLOW_TIMEOUT_MS;
+        if (totalDropCount == 0 || timeSinceLastDrop >= NO_FLOW_TIMEOUT_MS) {
             currentDpm = 0.0f;
-        } else if (sumUs > 0) {
-            unsigned long meanIntervalUs = sumUs / 5;
+        } else if (countValid > 0 && sumUs > 0) {
+            unsigned long meanIntervalUs = sumUs / countValid;
             currentDpm = 60000000.0f / float(meanIntervalUs);
+            if (timeSinceLastDrop > 3500) {
+                float instantDpm = 60000.0f / float(timeSinceLastDrop);
+                if (instantDpm < currentDpm) {
+                    currentDpm = instantDpm;
+                }
+            }
         } else {
             currentDpm = 0.0f;
         }
@@ -227,11 +239,11 @@ void loop() {
 }
 
 // -------------------------------------------------------------------------------------
-// DROP REGISTRATION VISUAL FEEDBACK
+// DROP REGISTRATION VISUAL FEEDBACK (50ms visible blink per drop)
 // -------------------------------------------------------------------------------------
 void onDropRegistered() {
     digitalWrite(PIN_LED, HIGH);
-    delayMicroseconds(5000); // 5ms visible pulse
+    delay(50); // 50ms clearly visible blink for human observation
     digitalWrite(PIN_LED, LOW);
 }
 
@@ -239,14 +251,14 @@ void onDropRegistered() {
 // EVALUATE ALERT CONDITIONS (REPORT TABLE 7.1)
 // -------------------------------------------------------------------------------------
 void evaluateAlertConditions(unsigned long timeSinceLastDrop) {
-    if (volumeRemainingMl <= 50.0f) {
-        // Low volume <= 10% of 500 mL bag -> Slow beep
-        currentStatus = "LOW_VOLUME";
-        triggerBuzzerPattern(1, 200);
-    } else if (timeSinceLastDrop >= NO_FLOW_TIMEOUT_MS) {
-        // No drop for > 30 s while active -> Continuous alarm
+    if (timeSinceLastDrop >= NO_FLOW_TIMEOUT_MS || currentDpm <= 0.5f || totalDropCount == 0) {
+        // No drop / Occlusion alarm (continuous buzzer pattern)
         currentStatus = "NO_FLOW";
         triggerBuzzerPattern(3, 150);
+    } else if (volumeRemainingMl <= 30.0f) {
+        // Low volume <= 15% of 200 mL bag -> Slow beep
+        currentStatus = "LOW_VOLUME";
+        triggerBuzzerPattern(1, 200);
     } else if (currentDpm > 150.0f) {
         // DPM > 150 -> Free flow risk -> Fast beep
         currentStatus = "FREE_FLOW";

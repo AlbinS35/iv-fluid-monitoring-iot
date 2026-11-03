@@ -100,6 +100,45 @@ class TestIVTelematicsReportCompliance(unittest.TestCase):
         self.assertEqual(r3.status_code, 201)
         self.assertEqual(r3.get_json()['data']['status'], 'LOW_VOLUME')
 
+        # No flow / Blockage: Even if status is sent as 'NORMAL', 0 DPM must normalize to 'NO_FLOW'
+        r4 = self.client.post('/api/telemetry', json={
+            "device_id": "WARD-A-BED-07",
+            "dpm": 0.0,
+            "vol_remaining_ml": 400.0,
+            "status": "NORMAL"
+        })
+        self.assertEqual(r4.status_code, 201)
+        self.assertEqual(r4.get_json()['data']['status'], 'NO_FLOW')
+
+    def test_08_container_volume_config(self):
+        """Verify dynamic IV container volume setting (e.g. 200 mL, 150 mL)."""
+        # Set container volume to 200 mL
+        res = self.client.post('/api/container', json={
+            "device_id": "WARD-A-BED-07",
+            "container_vol_ml": 200.0
+        })
+        self.assertEqual(res.status_code, 200)
+        data = res.get_json()
+        self.assertEqual(data.get('container_vol_ml'), 200.0)
+
+        # Ingest reading for 200 mL bottle with 180 mL remaining
+        res_ingest = self.client.post('/api/telemetry', json={
+            "device_id": "WARD-A-BED-07",
+            "dpm": 40.0,
+            "vol_remaining_ml": 180.0
+        })
+        self.assertEqual(res_ingest.status_code, 201)
+        ingest_data = res_ingest.get_json()['data']
+        self.assertEqual(ingest_data['container_vol_ml'], 200.0)
+        self.assertEqual(ingest_data['vol_infused_ml'], 20.0)
+
+        # Verify GET /api/latest reflects the 200 mL container size
+        res_latest = self.client.get('/api/latest/WARD-A-BED-07')
+        self.assertEqual(res_latest.status_code, 200)
+        latest_data = res_latest.get_json()['data']
+        self.assertEqual(latest_data['container_vol_ml'], 200.0)
+        self.assertEqual(latest_data['vol_remaining_ml'], 180.0)
+
 
 if __name__ == '__main__':
     unittest.main()

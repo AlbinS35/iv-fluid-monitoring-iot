@@ -45,7 +45,8 @@
 #define DRIP_FACTOR           20.0f
 
 // Standard IV Normal Saline / Dextrose Bag Volume (mL)
-#define INITIAL_BOTTLE_VOL_ML 500.0f
+// Matches user's 150-200 mL IV container (can also be 150.0f, 200.0f, or 500.0f)
+#define INITIAL_BOTTLE_VOL_ML 200.0f
 
 // Prescribed Clinical Infusion Rate (mL/h) -> 40 DPM on Macro 20 Set
 #define PRESCRIBED_FLOW_ML_HR 120.0f
@@ -56,17 +57,17 @@
 // -------------------------------------------------------------------------------------
 // 4. TIMING & ALERT THRESHOLDS (Report Table 7.1)
 // -------------------------------------------------------------------------------------
-// Hardware ISR Debounce Lockout in microseconds (60 ms = 60,000 µs)
-#define DEBOUNCE_MICROS       60000UL
+// Hardware ISR Debounce Lockout in microseconds (50 ms = 50,000 µs)
+#define DEBOUNCE_MICROS       50000UL
 
-// No-Drop Occlusion / Empty Bag Timeout in milliseconds (30 seconds)
-#define NO_FLOW_TIMEOUT_MS    30000UL
+// No-Drop Occlusion / Empty Bag Timeout in milliseconds (8 seconds for prompt live alert)
+#define NO_FLOW_TIMEOUT_MS    8000UL
 
 // Free-Flow Runaway Alarm Threshold (Drops per Minute)
 #define FREE_FLOW_DPM_LIMIT   150.0f
 
-// Low-Volume Reservoir Warning Threshold (≤ 10% of 500 mL = 50 mL)
-#define LOW_VOLUME_THRESHOLD  50.0f
+// Low-Volume Reservoir Warning Threshold (≤ 15% of 200 mL = 30 mL)
+#define LOW_VOLUME_THRESHOLD  30.0f
 
 // Periodic Telemetry Transmission Interval (Report Section 7.6)
 #define TELEMETRY_INTERVAL_MS 5000UL

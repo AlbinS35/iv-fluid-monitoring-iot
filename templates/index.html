@@ -169,6 +169,24 @@
       color: var(--text);
     }
 
+    .btn-vol-tag {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--card-border);
+      color: var(--text-muted);
+      font-size: 0.68rem;
+      padding: 2px 7px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-family: 'JetBrains Mono', monospace;
+      transition: all 0.2s;
+    }
+    .btn-vol-tag:hover, .btn-vol-tag.active {
+      background: rgba(6, 182, 212, 0.2);
+      border-color: var(--cyan);
+      color: var(--cyan);
+      font-weight: 700;
+    }
+
     /* ==================== 3 FOCUS CARDS ==================== */
     .kpi-grid {
       display: grid;
@@ -653,18 +671,27 @@
           </div>
 
           <div class="vol-stats">
-            <div class="vol-huge"><span id="volRemVal">372.0</span> <span>/ 500 mL</span></div>
+            <div class="vol-huge"><span id="volRemVal">200.0</span> <span id="volMaxDisplay">/ 200 mL</span></div>
             <div class="vol-row">
               <span>Infused Volume:</span>
-              <strong id="volInfVal">128.0 mL</strong>
+              <strong id="volInfVal">0.0 mL</strong>
             </div>
             <div class="vol-row">
               <span>Current Flow:</span>
-              <strong id="flowRateVal" style="color: var(--cyan);">120.0 mL/h</strong>
+              <strong id="flowRateVal" style="color: var(--cyan);">0.0 mL/h</strong>
             </div>
             <div class="vol-row">
               <span>Est. Completion:</span>
-              <strong id="etaVal" style="color: var(--green);">3h 06min</strong>
+              <strong id="etaVal" style="color: var(--green);">--</strong>
+            </div>
+            <div class="vol-row" style="margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--card-border);">
+              <span style="font-size: 0.7rem; color: var(--text-muted);">Bottle Size:</span>
+              <div style="display: flex; gap: 4px;">
+                <button class="btn-vol-tag" onclick="setBottleVolume(150)">150mL</button>
+                <button class="btn-vol-tag active" id="btnVol200" onclick="setBottleVolume(200)">200mL</button>
+                <button class="btn-vol-tag" onclick="setBottleVolume(250)">250mL</button>
+                <button class="btn-vol-tag" onclick="setBottleVolume(500)">500mL</button>
+              </div>
             </div>
           </div>
         </div>
@@ -894,6 +921,30 @@
       }
     }
 
+    // Dynamic Bottle Volume Control (150 mL, 200 mL, 250 mL, 500 mL)
+    let currentContainerVol = 200.0;
+    async function setBottleVolume(vol) {
+      currentContainerVol = Number(vol);
+      const maxEl = document.getElementById('volMaxDisplay');
+      if (maxEl) maxEl.innerText = `/ ${vol} mL`;
+      document.querySelectorAll('.btn-vol-tag').forEach(b => {
+        b.classList.toggle('active', b.innerText.includes(`${vol}`));
+      });
+      try {
+        await fetch('/api/container', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            device_id: DEVICE_ID,
+            container_vol_ml: vol
+          })
+        });
+        fetchLatest();
+      } catch (e) {
+        console.error('Failed to update container volume:', e);
+      }
+    }
+
     function soundAlert(status) {
       if (isMuted || status === 'NORMAL') return;
       try {
@@ -981,8 +1032,11 @@
       const dpm = Number(d.dpm || 0);
       const rem = Number(d.vol_remaining_ml || d.remaining_ml || 0);
       const flow = Number(d.flow_ml_hr || (dpm * 3.0));
-      const infused = Number(d.vol_infused_ml || Math.max(0, 500 - rem));
-      const status = String(d.status || 'NORMAL').toUpperCase();
+      let status = String(d.status || 'NO_FLOW').toUpperCase();
+      // Guard: When there are no drops (DPM <= 1.0), status cannot be NORMAL
+      if (dpm <= 1.0 && status === 'NORMAL') {
+        status = (rem <= 50.0) ? 'LOW_VOLUME' : 'NO_FLOW';
+      }
 
       // DPM
       document.getElementById('dpmVal').innerText = dpm.toFixed(1);
@@ -1000,11 +1054,20 @@
       }
 
       // Volume & Bottle
+      const totalBottle = Number(d.container_vol_ml || d.bottle_vol_ml || currentContainerVol || 200.0);
+      currentContainerVol = totalBottle;
       document.getElementById('volRemVal').innerText = rem.toFixed(1);
+      const maxEl = document.getElementById('volMaxDisplay');
+      if (maxEl) maxEl.innerText = `/ ${totalBottle.toFixed(0)} mL`;
       document.getElementById('volInfVal').innerText = `${infused.toFixed(1)} mL`;
       document.getElementById('flowRateVal').innerText = `${flow.toFixed(1)} mL/h`;
 
-      const volPercent = Math.min(Math.max((rem / 500) * 100, 0), 100);
+      // Highlight active bottle size button
+      document.querySelectorAll('.btn-vol-tag').forEach(b => {
+        b.classList.toggle('active', b.innerText.includes(`${Math.round(totalBottle)}`));
+      });
+
+      const volPercent = Math.min(Math.max((rem / totalBottle) * 100, 0), 100);
       document.getElementById('volPercentBadge').innerText = `${volPercent.toFixed(0)}%`;
       document.getElementById('liquidLevel').style.height = `${volPercent}%`;
       document.getElementById('volProgressBar').style.width = `${volPercent}%`;
