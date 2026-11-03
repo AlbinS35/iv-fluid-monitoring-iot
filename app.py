@@ -436,15 +436,15 @@ def get_latest_telemetry(device_id):
         silenced, rem_sec = is_bedside_silenced(device_id)
 
         # Compute how many seconds ago this record was written
-        # Used by dashboard to determine ONLINE vs OFFLINE (threshold: 15s)
+        # Used by dashboard to determine ONLINE vs OFFLINE (threshold: 45s)
         try:
             if hasattr(row['ts'], 'tzinfo') and row['ts'].tzinfo is not None:
-                last_seen_age = int((datetime.now(timezone.utc) - row['ts']).total_seconds())
+                last_seen_age = max(0, int((datetime.now(timezone.utc) - row['ts']).total_seconds()))
             else:
                 # Naive datetime (SQLite) - treat as UTC
                 from datetime import timezone as tz
                 naive_ts = row['ts'] if hasattr(row['ts'], 'year') else datetime.fromisoformat(str(row['ts']))
-                last_seen_age = int((datetime.now(timezone.utc).replace(tzinfo=None) - naive_ts).total_seconds())
+                last_seen_age = max(0, int((datetime.now(timezone.utc).replace(tzinfo=None) - naive_ts).total_seconds()))
         except Exception:
             last_seen_age = 0
 

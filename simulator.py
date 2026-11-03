@@ -21,12 +21,12 @@ DRIP_FACTOR = 20.0  # Macro Set: 20 drops = 1 mL
 PRESCRIBED_FLOW = 120.0  # 40 DPM = 120 mL/h
 
 
-def run_simulator(mode="normal", initial_vol=500.0, interval=5.0):
+def run_simulator(mode="normal", initial_vol=500.0, interval=5.0, api_url=API_URL, device_id=DEVICE_ID):
     print("=" * 75)
     print("  AMAL JYOTHI COLLEGE OF ENGINEERING - MCA 24MCAT213")
     print("  ESP32 Edge Microcontroller Telematics Simulator")
-    print(f"  Target Device: {DEVICE_ID} | Mode: {mode.upper()} | Init Vol: {initial_vol} mL")
-    print(f"  Gateway API Endpoint: {API_URL} | Interval: {interval}s")
+    print(f"  Target Device: {device_id} | Mode: {mode.upper()} | Init Vol: {initial_vol} mL")
+    print(f"  Gateway API Endpoint: {api_url} | Interval: {interval}s")
     print("=" * 75)
 
     current_vol = float(initial_vol)
@@ -92,7 +92,7 @@ def run_simulator(mode="normal", initial_vol=500.0, interval=5.0):
             status = "LOW_VOLUME"
 
         payload = {
-            "device_id": DEVICE_ID,
+            "device_id": device_id,
             "dpm": dpm,
             "flow_ml_hr": flow_ml_hr,
             "vol_infused_ml": round(vol_infused, 1),
@@ -103,19 +103,19 @@ def run_simulator(mode="normal", initial_vol=500.0, interval=5.0):
 
         try:
             start_time = time.time()
-            resp = requests.post(API_URL, json=payload, timeout=4.0)
+            resp = requests.post(api_url, json=payload, timeout=8.0)
             latency = (time.time() - start_time) * 1000
 
             if resp.status_code == 201:
                 res_data = resp.json().get('data', {})
-                print(f"[{time.strftime('%X')}] [ID: {res_data.get('id', '-')}] {DEVICE_ID} | "
+                print(f"[{time.strftime('%X')}] [ID: {res_data.get('id', '-')}] {device_id} | "
                       f"Flow: {dpm:5.1f} DPM ({flow_ml_hr:5.1f} mL/h) | Vol: {current_vol:5.1f} mL | "
                       f"Status: {status:<10} | RTT: {latency:4.0f}ms")
             else:
                 print(f"[!] Gateway returned HTTP {resp.status_code}: {resp.text}")
 
         except requests.exceptions.RequestException as err:
-            print(f"[x] Offline network error connecting to {API_URL}: {err}")
+            print(f"[x] Offline network error connecting to {api_url}: {err}")
 
         time.sleep(interval)
 
@@ -126,9 +126,11 @@ if __name__ == '__main__':
                         default='normal', help='Simulation scenario to execute (Report Table 7.1)')
     parser.add_argument('--vol', type=float, default=500.0, help='Initial bottle volume in mL')
     parser.add_argument('--interval', type=float, default=5.0, help='Telemetry dispatch interval in seconds (default: 5s)')
+    parser.add_argument('--url', type=str, default=API_URL, help='API endpoint URL (default: http://localhost:5000/api/telemetry)')
+    parser.add_argument('--device', type=str, default=DEVICE_ID, help='Device/Bed ID (default: WARD-A-BED-07)')
 
     args = parser.parse_args()
     try:
-        run_simulator(mode=args.mode, initial_vol=args.vol, interval=args.interval)
+        run_simulator(mode=args.mode, initial_vol=args.vol, interval=args.interval, api_url=args.url, device_id=args.device)
     except KeyboardInterrupt:
         print("\n[i] Simulation stopped by user.")

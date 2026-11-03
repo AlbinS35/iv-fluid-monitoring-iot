@@ -72,8 +72,8 @@
 // Periodic Telemetry Transmission Interval (Report Section 7.6)
 #define TELEMETRY_INTERVAL_MS 5000UL
 
-// Periodic Dashboard Prescription Fetch Interval (Data fetching from Dashboard)
-#define FETCH_INTERVAL_MS     15000UL
+// Periodic Dashboard Prescription Fetch Interval (Data fetching from Dashboard fallback)
+#define FETCH_INTERVAL_MS     45000UL
 
 // Moving Average Window for DPM (Average of last 5 drop intervals)
 #define DPM_AVG_WINDOW        5

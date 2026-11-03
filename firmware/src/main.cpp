@@ -391,7 +391,7 @@ bool sendTelemetryToGateway(const TelemetryPacket& packet) {
         http.begin(standardClient, TELEMETRY_POST_URL);
     }
     http.addHeader("Content-Type", "application/json");
-    http.setTimeout(5000);
+    http.setTimeout(8000);
 
     StaticJsonDocument<256> doc;
     doc["device_id"]        = packet.deviceId;
@@ -418,6 +418,15 @@ bool sendTelemetryToGateway(const TelemetryPacket& packet) {
             } else {
                 bedsideSilenceUntilMillis = 0;
             }
+            float cVol = 0.0f;
+            if (respDoc.containsKey("container_vol_ml")) {
+                cVol = respDoc["container_vol_ml"].as<float>();
+            } else if (respDoc.containsKey("bottle_vol_ml")) {
+                cVol = respDoc["bottle_vol_ml"].as<float>();
+            }
+            if (cVol >= 50.0f && cVol <= 2000.0f && fabs(cVol - activeBottleVolMl) > 0.5f) {
+                activeBottleVolMl = cVol;
+            }
         }
         Serial.printf("[POST OK] %s | DPM: %.1f | Flow: %.1f mL/h | Rem: %.1f/%.1f mL | Status: %s (HTTP %d) | Silenced: %s\n",
                       packet.deviceId, packet.dpm, packet.flowMlHr, packet.volRemainingMl, activeBottleVolMl, packet.status, httpCode,
@@ -427,6 +436,7 @@ bool sendTelemetryToGateway(const TelemetryPacket& packet) {
     }
 
     http.end();
+    secureClient.stop();
     return success;
 }
 
@@ -447,7 +457,7 @@ bool fetchDashboardPrescription() {
     } else {
         http.begin(standardClient, url);
     }
-    http.setTimeout(5000);
+    http.setTimeout(8000);
 
     int httpCode = http.GET();
     if (httpCode == 200) {
@@ -482,10 +492,12 @@ bool fetchDashboardPrescription() {
                           activePrescribedFlow, activeBottleVolMl, (millis() < bedsideSilenceUntilMillis) ? "YES" : "NO");
         }
         http.end();
+        secureClient.stop();
         return true;
     }
 
     http.end();
+    secureClient.stop();
     return false;
 }
 
@@ -531,10 +543,10 @@ void loop() {
     evaluateClinicalAlerts();
     handleAcousticAndVisualIndicators();
 
-    // 4. Send telemetry packet every 5 seconds normally; every 2 seconds during alarms
-    // Shorter interval during active alarm ensures remote silence commands propagate quickly
+    // 4. Send telemetry packet every 5 seconds normally; every 4 seconds during alarms
+    // 4s ensures fast alarm notification without saturating ESP32 lwIP TLS sockets
     unsigned long activeTelemetryInterval = (currentStatus != STATUS_NORMAL)
-                                             ? 2000UL : TELEMETRY_INTERVAL_MS;
+                                             ? 4000UL : TELEMETRY_INTERVAL_MS;
     if (now - lastTelemetryMillis >= activeTelemetryInterval) {
         lastTelemetryMillis = now;
 

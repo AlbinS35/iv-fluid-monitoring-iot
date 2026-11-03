@@ -975,14 +975,16 @@
     }
 
     // Polling API
-    // ONLINE/OFFLINE threshold: if ESP32 hasn't sent telemetry in > 35s it's considered offline.
-    // The ESP32 posts every 2s during alarms, 5s normally. 35s prevents false-offline flickers from TLS latency or mobile hotspot jitter.
-    const OFFLINE_THRESHOLD_SEC = 35;
+    // ONLINE/OFFLINE threshold: if ESP32 hasn't sent telemetry in > 45s it's considered offline.
+    // 45s accommodates mobile hotspot TLS handshakes and minor cloud latency without false flickers.
+    const OFFLINE_THRESHOLD_SEC = 45;
+    let consecutiveNetworkErrors = 0;
 
     function setDeviceOnline(online, lastSeenSec) {
       const pill = document.getElementById('linkStatusPill');
       const dot  = document.getElementById('statusDot');
       const txt  = document.getElementById('linkStatusText');
+      if (!pill || !dot || !txt) return;
 
       if (online) {
         pill.style.color = 'var(--green)';
@@ -993,7 +995,11 @@
         pill.style.color = 'var(--red)';
         dot.style.background = 'var(--red)';
         dot.style.boxShadow = '0 0 6px var(--red)';
-        const ago = lastSeenSec != null ? `${lastSeenSec}s ago` : '';
+        let ago = '';
+        if (lastSeenSec != null && Number(lastSeenSec) > 0) {
+          const s = Math.round(Number(lastSeenSec));
+          ago = s >= 60 ? `${Math.floor(s / 60)}m ago` : `${s}s ago`;
+        }
         txt.innerText = ago ? `OFFLINE · ${ago}` : 'OFFLINE';
       }
     }
@@ -1001,17 +1007,26 @@
     async function fetchLatest() {
       try {
         const res = await fetch(`/api/latest/${DEVICE_ID}`);
-        if (!res.ok) throw new Error('API Error');
+        if (!res.ok) throw new Error('API Error: ' + res.status);
         const json = await res.json();
+        consecutiveNetworkErrors = 0;
+
         if (json.status === 'success' && json.data) {
-          const ageSeconds = json.data.last_seen_seconds_ago ?? 0;
+          const ageSeconds = Number(json.data.last_seen_seconds_ago ?? 0);
           const isOnline = ageSeconds <= OFFLINE_THRESHOLD_SEC;
           setDeviceOnline(isOnline, isOnline ? null : ageSeconds);
-          updateUI(json.data);
+          try {
+            updateUI(json.data);
+          } catch (uiErr) {
+            console.error('Error rendering telemetry UI:', uiErr);
+          }
         }
       } catch (e) {
-        // Network error — Flask itself is unreachable
-        setDeviceOnline(false, null);
+        consecutiveNetworkErrors++;
+        // Avoid flickering on single network hiccup; require 3 consecutive failures
+        if (consecutiveNetworkErrors >= 3) {
+          setDeviceOnline(false, null);
+        }
       }
     }
 
@@ -1056,6 +1071,7 @@
       // Volume & Bottle
       const totalBottle = Number(d.container_vol_ml || d.bottle_vol_ml || currentContainerVol || 200.0);
       currentContainerVol = totalBottle;
+      const infused = Number(d.vol_infused_ml != null ? d.vol_infused_ml : Math.max(0, totalBottle - rem));
       document.getElementById('volRemVal').innerText = rem.toFixed(1);
       const maxEl = document.getElementById('volMaxDisplay');
       if (maxEl) maxEl.innerText = `/ ${totalBottle.toFixed(0)} mL`;

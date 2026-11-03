@@ -13,6 +13,8 @@ ENV/
 .pioenvs/
 .piolibdeps/
 firmware/.pio/
+.vscode/
+compile_commands.json
 
 # OS files
 .DS_Store
