@@ -975,9 +975,9 @@
     }
 
     // Polling API
-    // ONLINE/OFFLINE threshold: if ESP32 hasn't sent telemetry in > 15s it's considered offline.
-    // The ESP32 posts every 2s during alarms, 5s normally, so 15s is a safe dead-band.
-    const OFFLINE_THRESHOLD_SEC = 15;
+    // ONLINE/OFFLINE threshold: if ESP32 hasn't sent telemetry in > 35s it's considered offline.
+    // The ESP32 posts every 2s during alarms, 5s normally. 35s prevents false-offline flickers from TLS latency or mobile hotspot jitter.
+    const OFFLINE_THRESHOLD_SEC = 35;
 
     function setDeviceOnline(online, lastSeenSec) {
       const pill = document.getElementById('linkStatusPill');

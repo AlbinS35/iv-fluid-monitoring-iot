@@ -300,6 +300,8 @@ void chirpBuzzer(int count, int durationMs) {
 void connectWiFi() {
     Serial.printf("[WIFI] Connecting to SSID: %s ", WIFI_SSID);
     WiFi.mode(WIFI_STA);
+    WiFi.setSleep(false);
+    WiFi.setAutoReconnect(true);
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 
     int retries = 0;

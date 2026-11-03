@@ -140,9 +140,9 @@ void connectWiFi() {
     if (WiFi.status() == WL_CONNECTED) return;
 
     Serial.printf("[WIFI] Connecting to SSID: %s ...\n", WIFI_SSID);
-    WiFi.disconnect();
-    delay(100);
     WiFi.mode(WIFI_STA);
+    WiFi.setSleep(false);           // CRITICAL: Disable modem sleep to prevent Wi-Fi dropouts on mobile hotspots
+    WiFi.setAutoReconnect(true);    // Allow background reconnection without stalling loop
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 
     unsigned long startAttempt = millis();
